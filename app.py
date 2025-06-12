@@ -8,7 +8,7 @@ import os
 # Load YOLO model
 model = YOLO('best.pt')
 
-st.title("🎥 Person Detection with YOLO and Frame Playback")
+st.title("🎥 Person Count Detection with YOLO and Frame Playback")
 
 # File uploader only
 uploaded_file = st.file_uploader("Upload a video file", type=["mp4", "avi", "mov", "mkv"])
