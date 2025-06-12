@@ -6,7 +6,7 @@ import torch
 
 # Load the trained YOLO model (assuming it's saved as 'yolo11n.torchscript')
 # Make sure the model path is correct
-model = YOLO('yolo11n.pt') # or load the exported torchscript model: torch.jit.load('yolo11n.torchscript')
+model = YOLO('best.pt') # or load the exported torchscript model: torch.jit.load('yolo11n.torchscript')
 
 st.title("Person Detection with YOLO")
 
