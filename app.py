@@ -1,4 +1,3 @@
-# app.py
 import streamlit as st
 import cv2
 import numpy as np
@@ -10,63 +9,72 @@ import os
 # Load YOLO model
 model = YOLO('yolo11n.pt')
 
-st.title("Person Detection with YOLO")
+st.title("YOLO Person Detection with Video Playback")
 
-# Choose video source
-video_source = st.radio("Choose video source:", ('Upload Video', 'Webcam'))
+video_source = st.radio("Choose video source:", ("Upload Video", "Webcam"))
 
 uploaded_file = None
-if video_source == 'Upload Video':
+if video_source == "Upload Video":
     uploaded_file = st.file_uploader("Upload a video file", type=["mp4", "avi", "mov", "mkv"])
 
-# Create Streamlit UI elements
-stframe = st.empty()
-playback_state = st.checkbox("Play Video", value=False)
-restart_button = st.button("Restart Video")
+# For uploaded video
+if video_source == "Upload Video" and uploaded_file is not None:
+    tfile = tempfile.NamedTemporaryFile(delete=False)
+    tfile.write(uploaded_file.read())
+    tfile.flush()
+    cap = cv2.VideoCapture(tfile.name)
 
-# Persistent session state for controlling video playback
-if "cap" not in st.session_state:
-    st.session_state.cap = None
-if "restart" not in st.session_state:
-    st.session_state.restart = False
-
-# Video source setup
-if (video_source == 'Webcam' or uploaded_file is not None) and (playback_state or st.session_state.cap is not None):
-    if st.session_state.cap is None or st.session_state.restart:
-        if video_source == 'Webcam':
-            st.session_state.cap = cv2.VideoCapture(0)
-        else:
-            tfile = tempfile.NamedTemporaryFile(delete=False)
-            tfile.write(uploaded_file.read())
-            tfile.flush()
-            st.session_state.video_path = tfile.name
-            st.session_state.cap = cv2.VideoCapture(tfile.name)
-        st.session_state.restart = False
-
-    cap = st.session_state.cap
-
-    if not cap or not cap.isOpened():
-        st.error("Error: Could not open video source.")
+    if not cap.isOpened():
+        st.error("Error: Could not open video file.")
     else:
-        if playback_state:
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+        stframe = st.empty()
+
+        # Set initial state
+        if "current_frame" not in st.session_state:
+            st.session_state.current_frame = 0
+        if "is_playing" not in st.session_state:
+            st.session_state.is_playing = False
+
+        # Playback control UI
+        col1, col2 = st.columns([1, 6])
+        with col1:
+            play_pause = st.button("▶️ Play" if not st.session_state.is_playing else "⏸️ Pause")
+        with col2:
+            slider = st.slider("Frame", 0, total_frames - 1, st.session_state.current_frame, key="slider")
+
+        if play_pause:
+            st.session_state.is_playing = not st.session_state.is_playing
+
+        # Use slider frame if paused
+        if not st.session_state.is_playing:
+            st.session_state.current_frame = slider
+            cap.set(cv2.CAP_PROP_POS_FRAMES, slider)
             ret, frame = cap.read()
-            if not ret:
-                st.write("End of video.")
-                cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # Loop video
-            else:
+            if ret:
                 results = model(frame)
                 for r in results:
                     annotated_frame = r.plot(conf=False)
-                stframe.image(annotated_frame, channels="BGR")
+                stframe.image(annotated_frame, channels="BGR", use_column_width=True)
         else:
-            stframe.info("Paused")
+            # Playing: advance frame by frame
+            cap.set(cv2.CAP_PROP_POS_FRAMES, st.session_state.current_frame)
+            ret, frame = cap.read()
+            if ret:
+                results = model(frame)
+                for r in results:
+                    annotated_frame = r.plot(conf=False)
+                stframe.image(annotated_frame, channels="BGR", use_column_width=True)
+                st.session_state.current_frame += 1
+                if st.session_state.current_frame >= total_frames:
+                    st.session_state.is_playing = False
+                    st.session_state.current_frame = 0
 
-    # Restart logic
-    if restart_button:
-        if cap:
-            cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-        st.session_state.restart = True
+        cap.release()
+        os.unlink(tfile.name)
 
-# Cleanup if file uploaded
-if video_source == 'Upload Video' and uploaded_file is None:
-    st.info("Please upload a video file.")
+elif video_source == "Webcam":
+    st.warning("Slider-based playback is only supported for uploaded videos. Use webcam mode for live feed.")
