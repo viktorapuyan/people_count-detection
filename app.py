@@ -9,7 +9,7 @@ import os
 # Load YOLO model
 model = YOLO('best.pt')
 
-st.title("YOLO Person Detection with Video Playback")
+st.title("YOLO Person Detection with Playback and Counting")
 
 video_source = st.radio("Choose video source:", ("Upload Video", "Webcam"))
 
@@ -28,18 +28,17 @@ if video_source == "Upload Video" and uploaded_file is not None:
         st.error("Error: Could not open video file.")
     else:
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
         stframe = st.empty()
+        person_count_placeholder = st.empty()
 
-        # Set initial state
+        # Initialize session state
         if "current_frame" not in st.session_state:
             st.session_state.current_frame = 0
         if "is_playing" not in st.session_state:
             st.session_state.is_playing = False
 
-        # Playback control UI
+        # Controls
         col1, col2 = st.columns([1, 6])
         with col1:
             play_pause = st.button("▶️ Play" if not st.session_state.is_playing else "⏸️ Pause")
@@ -49,32 +48,33 @@ if video_source == "Upload Video" and uploaded_file is not None:
         if play_pause:
             st.session_state.is_playing = not st.session_state.is_playing
 
-        # Use slider frame if paused
+        # Read frame
         if not st.session_state.is_playing:
             st.session_state.current_frame = slider
             cap.set(cv2.CAP_PROP_POS_FRAMES, slider)
             ret, frame = cap.read()
-            if ret:
-                results = model(frame)
-                for r in results:
-                    annotated_frame = r.plot(conf=False)
-                stframe.image(annotated_frame, channels="BGR", use_column_width=True)
         else:
-            # Playing: advance frame by frame
             cap.set(cv2.CAP_PROP_POS_FRAMES, st.session_state.current_frame)
             ret, frame = cap.read()
-            if ret:
-                results = model(frame)
-                for r in results:
-                    annotated_frame = r.plot(conf=False)
-                stframe.image(annotated_frame, channels="BGR", use_column_width=True)
-                st.session_state.current_frame += 1
-                if st.session_state.current_frame >= total_frames:
-                    st.session_state.is_playing = False
-                    st.session_state.current_frame = 0
+            st.session_state.current_frame += 1
+            if st.session_state.current_frame >= total_frames:
+                st.session_state.is_playing = False
+                st.session_state.current_frame = 0
+
+        if ret:
+            results = model(frame)
+            person_count = 0
+            for r in results:
+                boxes = r.boxes
+                classes = boxes.cls
+                person_count = sum(1 for c in classes if int(c) == 0)  # YOLO class 0 = person
+                annotated_frame = r.plot(conf=False)
+
+            stframe.image(annotated_frame, channels="BGR", use_column_width=True)
+            person_count_placeholder.markdown(f"### 👥 Persons Detected: `{person_count}`")
 
         cap.release()
         os.unlink(tfile.name)
 
 elif video_source == "Webcam":
-    st.warning("Slider-based playback is only supported for uploaded videos. Use webcam mode for live feed.")
+    st.warning("Slider playback and person counting are available only for uploaded videos in this version.")
