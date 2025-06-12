@@ -1,56 +1,72 @@
+# app.py
 import streamlit as st
 import cv2
 import numpy as np
 from ultralytics import YOLO
 import torch
 import tempfile
+import os
 
-# Load the trained YOLO model (assuming it's saved as 'yolo11n.torchscript')
-# Make sure the model path is correct
-model = YOLO('best.pt') # or load the exported torchscript model: torch.jit.load('yolo11n.torchscript')
+# Load YOLO model
+model = YOLO('yolo11n.pt')
 
 st.title("Person Detection with YOLO")
 
-# Option to upload a video file or use webcam
+# Choose video source
 video_source = st.radio("Choose video source:", ('Upload Video', 'Webcam'))
 
 uploaded_file = None
 if video_source == 'Upload Video':
     uploaded_file = st.file_uploader("Upload a video file", type=["mp4", "avi", "mov", "mkv"])
 
+# Create Streamlit UI elements
 stframe = st.empty()
+playback_state = st.checkbox("Play Video", value=False)
+restart_button = st.button("Restart Video")
 
-if video_source == 'Webcam' or uploaded_file is not None:
-    if video_source == 'Webcam':
-        cap = cv2.VideoCapture(0) # 0 for default webcam
-    elif uploaded_file is not None:
-        tfile = tempfile.NamedTemporaryFile(delete=False)
-        tfile.write(uploaded_file.read())
-        cap = cv2.VideoCapture(tfile.name)
+# Persistent session state for controlling video playback
+if "cap" not in st.session_state:
+    st.session_state.cap = None
+if "restart" not in st.session_state:
+    st.session_state.restart = False
 
-    if not cap.isOpened():
+# Video source setup
+if (video_source == 'Webcam' or uploaded_file is not None) and (playback_state or st.session_state.cap is not None):
+    if st.session_state.cap is None or st.session_state.restart:
+        if video_source == 'Webcam':
+            st.session_state.cap = cv2.VideoCapture(0)
+        else:
+            tfile = tempfile.NamedTemporaryFile(delete=False)
+            tfile.write(uploaded_file.read())
+            tfile.flush()
+            st.session_state.video_path = tfile.name
+            st.session_state.cap = cv2.VideoCapture(tfile.name)
+        st.session_state.restart = False
+
+    cap = st.session_state.cap
+
+    if not cap or not cap.isOpened():
         st.error("Error: Could not open video source.")
     else:
-        while cap.isOpened():
+        if playback_state:
             ret, frame = cap.read()
             if not ret:
-                st.write("End of video or error reading frame.")
-                break
+                st.write("End of video.")
+                cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # Loop video
+            else:
+                results = model(frame)
+                for r in results:
+                    annotated_frame = r.plot(conf=False)
+                stframe.image(annotated_frame, channels="BGR")
+        else:
+            stframe.info("Paused")
 
-            # Perform detection
-            results = model(frame)
+    # Restart logic
+    if restart_button:
+        if cap:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+        st.session_state.restart = True
 
-            # Overlay results on the frame
-            for r in results:
-                annotated_frame = r.plot(conf=False) # plot with confidence scores hidden
-
-            # Display the frame
-            stframe.image(annotated_frame, channels="BGR")
-
-        cap.release()
-        if video_source == 'Upload Video':
-            tfile.close()
-            os.unlink(tfile.name) # Clean up the temporary file
-
-elif video_source == 'Upload Video' and uploaded_file is None:
+# Cleanup if file uploaded
+if video_source == 'Upload Video' and uploaded_file is None:
     st.info("Please upload a video file.")
