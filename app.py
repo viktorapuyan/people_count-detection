@@ -3,6 +3,7 @@ import cv2
 import numpy as np
 from ultralytics import YOLO
 import torch
+import tempfile
 
 # Load the trained YOLO model (assuming it's saved as 'yolo11n.torchscript')
 # Make sure the model path is correct
