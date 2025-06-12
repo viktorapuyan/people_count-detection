@@ -2,43 +2,38 @@ import streamlit as st
 import cv2
 import numpy as np
 from ultralytics import YOLO
-import torch
 import tempfile
 import os
 
 # Load YOLO model
 model = YOLO('best.pt')
 
-st.title("YOLO Person Detection with Playback and Counting")
+st.title("🎥 Person Detection with YOLO and Frame Playback")
 
-video_source = st.radio("Choose video source:", ("Upload Video", "Webcam"))
+# File uploader only
+uploaded_file = st.file_uploader("Upload a video file", type=["mp4", "avi", "mov", "mkv"])
 
-uploaded_file = None
-if video_source == "Upload Video":
-    uploaded_file = st.file_uploader("Upload a video file", type=["mp4", "avi", "mov", "mkv"])
-
-# For uploaded video
-if video_source == "Upload Video" and uploaded_file is not None:
+if uploaded_file is not None:
     tfile = tempfile.NamedTemporaryFile(delete=False)
     tfile.write(uploaded_file.read())
     tfile.flush()
     cap = cv2.VideoCapture(tfile.name)
 
     if not cap.isOpened():
-        st.error("Error: Could not open video file.")
+        st.error("❌ Could not open uploaded video.")
     else:
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
         stframe = st.empty()
         person_count_placeholder = st.empty()
 
-        # Initialize session state
+        # Initialize playback state
         if "current_frame" not in st.session_state:
             st.session_state.current_frame = 0
         if "is_playing" not in st.session_state:
             st.session_state.is_playing = False
 
-        # Controls
+        # Playback controls
         col1, col2 = st.columns([1, 6])
         with col1:
             play_pause = st.button("▶️ Play" if not st.session_state.is_playing else "⏸️ Pause")
@@ -48,7 +43,7 @@ if video_source == "Upload Video" and uploaded_file is not None:
         if play_pause:
             st.session_state.is_playing = not st.session_state.is_playing
 
-        # Read frame
+        # Handle frame reading and detection
         if not st.session_state.is_playing:
             st.session_state.current_frame = slider
             cap.set(cv2.CAP_PROP_POS_FRAMES, slider)
@@ -67,7 +62,7 @@ if video_source == "Upload Video" and uploaded_file is not None:
             for r in results:
                 boxes = r.boxes
                 classes = boxes.cls
-                person_count = sum(1 for c in classes if int(c) == 0)  # YOLO class 0 = person
+                person_count = sum(1 for c in classes if int(c) == 0)  # Class 0 = person
                 annotated_frame = r.plot(conf=False)
 
             stframe.image(annotated_frame, channels="BGR", use_column_width=True)
@@ -76,5 +71,5 @@ if video_source == "Upload Video" and uploaded_file is not None:
         cap.release()
         os.unlink(tfile.name)
 
-elif video_source == "Webcam":
-    st.warning("Slider playback and person counting are available only for uploaded videos in this version.")
+else:
+    st.info("📁 Please upload a video to start detection.")
