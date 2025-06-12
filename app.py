@@ -7,7 +7,7 @@ import tempfile
 import os
 
 # Load YOLO model
-model = YOLO('yolo11n.pt')
+model = YOLO('best.pt')
 
 st.title("YOLO Person Detection with Video Playback")
 
