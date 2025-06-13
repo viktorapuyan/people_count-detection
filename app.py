@@ -6,7 +6,7 @@ import tempfile
 import os
 
 # Load YOLO model
-model = YOLO('best.torchscript')
+model = YOLO('best.pt')
 
 st.title("🎥 Person Count Detection with YOLO and Frame Playback")
 
